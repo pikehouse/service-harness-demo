@@ -2,7 +2,7 @@
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
-from typing import Generator
+from typing import Generator, Optional
 
 from harness.config import get_settings
 
@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
     pass
 
 
-def get_engine(database_url: str | None = None):
+def get_engine(database_url: Optional[str] = None):
     """Create database engine."""
     url = database_url or get_settings().database_url
     engine = create_engine(
