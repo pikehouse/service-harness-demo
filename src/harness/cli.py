@@ -4,6 +4,90 @@ import argparse
 import sys
 
 
+def run_demo():
+    """Launch demo in tmux with split panes.
+
+    Layout:
+    ┌─────────────────┬─────────────────┐
+    │     service     │     monitor     │
+    ├─────────────────┼─────────────────┤
+    │      agent      │      web        │
+    └─────────────────┴─────────────────┘
+    """
+    import subprocess
+    import shutil
+
+    # Check if tmux is available
+    if not shutil.which("tmux"):
+        print("Error: tmux is not installed. Please install tmux first.")
+        print("  macOS: brew install tmux")
+        print("  Linux: apt install tmux")
+        sys.exit(1)
+
+    session_name = "harness-demo"
+
+    # Kill existing session if any
+    subprocess.run(["tmux", "kill-session", "-t", session_name],
+                   capture_output=True)
+
+    # Create new session with first pane (service)
+    subprocess.run([
+        "tmux", "new-session", "-d", "-s", session_name,
+        "-n", "harness",
+        "harness service"
+    ])
+
+    # Split horizontally for monitor (right side)
+    subprocess.run([
+        "tmux", "split-window", "-h", "-t", session_name,
+        "harness monitor"
+    ])
+
+    # Split the left pane vertically for agent (bottom left)
+    subprocess.run([
+        "tmux", "select-pane", "-t", f"{session_name}:0.0"
+    ])
+    subprocess.run([
+        "tmux", "split-window", "-v", "-t", session_name,
+        "harness agent"
+    ])
+
+    # Split the right pane vertically for web (bottom right)
+    subprocess.run([
+        "tmux", "select-pane", "-t", f"{session_name}:0.1"
+    ])
+    subprocess.run([
+        "tmux", "split-window", "-v", "-t", session_name,
+        "harness web"
+    ])
+
+    # Select the service pane (top left)
+    subprocess.run([
+        "tmux", "select-pane", "-t", f"{session_name}:0.0"
+    ])
+
+    print(f"Demo started in tmux session '{session_name}'")
+    print()
+    print("To attach: tmux attach -t harness-demo")
+    print("To kill:   tmux kill-session -t harness-demo")
+    print()
+    print("Demo layout:")
+    print("┌─────────────────┬─────────────────┐")
+    print("│     service     │     monitor     │")
+    print("├─────────────────┼─────────────────┤")
+    print("│      agent      │       web       │")
+    print("└─────────────────┴─────────────────┘")
+    print()
+    print("To kill the service and trigger recovery:")
+    print("  1. Attach to tmux: tmux attach -t harness-demo")
+    print("  2. Select service pane (top-left): Ctrl-b, arrow keys")
+    print("  3. Press Ctrl-C to kill it")
+    print("  4. Watch monitor detect failure and agent restart it!")
+
+    # Attach to session
+    subprocess.run(["tmux", "attach", "-t", session_name])
+
+
 def init_harness():
     """Initialize the database and seed data."""
     from harness.database import init_db, get_session
@@ -48,12 +132,20 @@ def main():
     # harness init - initialize database and seed data
     subparsers.add_parser("init", help="Initialize database and seed data")
 
+    # harness demo - tmux-based demo with split panes
+    subparsers.add_parser("demo", help="Start demo in tmux with split panes")
+
     # harness run - start all processes
     run_parser = subparsers.add_parser("run", help="Start all harness processes")
     run_parser.add_argument(
         "--no-service",
         action="store_true",
         help="Don't start the rate limiter service (for external service)",
+    )
+    run_parser.add_argument(
+        "-q", "--quiet",
+        action="store_true",
+        help="Reduce output noise (filter uvicorn/SQL logs)",
     )
 
     # harness web - just the web server
@@ -81,9 +173,12 @@ def main():
     if args.command == "init":
         init_harness()
 
+    elif args.command == "demo":
+        run_demo()
+
     elif args.command == "run":
         from harness.supervisor import run_supervisor
-        run_supervisor(include_service=not args.no_service)
+        run_supervisor(include_service=not args.no_service, quiet=args.quiet)
 
     elif args.command == "web":
         from harness.web import run_web

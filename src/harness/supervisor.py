@@ -5,7 +5,19 @@ import sys
 import signal
 import time
 import os
+import re
 from typing import Dict, Optional
+
+
+# ANSI color codes
+COLORS = {
+    "web": "\033[36m",      # Cyan
+    "monitor": "\033[33m",  # Yellow
+    "agent": "\033[32m",    # Green
+    "service": "\033[35m",  # Magenta
+    "reset": "\033[0m",
+    "bold": "\033[1m",
+}
 
 
 class Supervisor:
@@ -20,11 +32,25 @@ class Supervisor:
     Does NOT auto-restart crashed processes - the agent handles recovery.
     """
 
-    def __init__(self, include_service: bool = True):
+    # Patterns to filter out in quiet mode
+    NOISE_PATTERNS = [
+        r"INFO:\s+Started server process",
+        r"INFO:\s+Waiting for application startup",
+        r"INFO:\s+Application startup complete",
+        r"INFO:\s+Uvicorn running on",
+        r"INFO:\s+Started reloader process",
+        r"INFO:\s+127\.0\.0\.1:\d+ - ",  # HTTP access logs
+        r"DEBUG:",
+        r"sqlalchemy\.engine\.Engine",
+    ]
+
+    def __init__(self, include_service: bool = True, quiet: bool = False):
         self.include_service = include_service
+        self.quiet = quiet
         self.processes: Dict[str, subprocess.Popen] = {}
         self.running = False
         self._python = sys.executable
+        self._noise_re = re.compile("|".join(self.NOISE_PATTERNS))
 
     def start(self):
         """Start all subprocesses."""
@@ -52,6 +78,23 @@ class Supervisor:
         # Monitor loop - just wait and log status
         self._monitor_loop()
 
+    def _print(self, name: str, message: str, force: bool = False):
+        """Print a message with colored prefix.
+
+        Args:
+            name: Process name (for color selection)
+            message: Message to print
+            force: Print even in quiet mode
+        """
+        # Filter noise in quiet mode
+        if self.quiet and not force:
+            if self._noise_re.search(message):
+                return
+
+        color = COLORS.get(name, "")
+        reset = COLORS["reset"]
+        print(f"  {color}[{name}]{reset} {message}")
+
     def _start_process(self, name: str, cmd: list):
         """Start a subprocess."""
         env = os.environ.copy()
@@ -65,7 +108,7 @@ class Supervisor:
             text=True,
         )
         self.processes[name] = process
-        print(f"  [{name}] Started (PID {process.pid})")
+        self._print(name, f"Started (PID {process.pid})", force=True)
 
     def _monitor_loop(self):
         """Main loop - monitor processes and forward output."""
@@ -82,7 +125,7 @@ class Supervisor:
             for name, proc in list(self.processes.items()):
                 ret = proc.poll()
                 if ret is not None:
-                    print(f"  [{name}] Process exited with code {ret}")
+                    self._print(name, f"Process exited with code {ret}", force=True)
                     # Remove from fd mapping
                     if proc.stdout:
                         fd = proc.stdout.fileno()
@@ -112,7 +155,7 @@ class Supervisor:
                     try:
                         line = stdout.readline()
                         if line:
-                            print(f"  [{name}] {line.rstrip()}")
+                            self._print(name, line.rstrip())
                     except (ValueError, OSError):
                         pass
 
@@ -140,7 +183,12 @@ class Supervisor:
         print("All processes stopped.")
 
 
-def run_supervisor(include_service: bool = True):
-    """Run the supervisor."""
-    supervisor = Supervisor(include_service=include_service)
+def run_supervisor(include_service: bool = True, quiet: bool = False):
+    """Run the supervisor.
+
+    Args:
+        include_service: Whether to start the rate limiter service
+        quiet: Reduce output noise from uvicorn and SQL logs
+    """
+    supervisor = Supervisor(include_service=include_service, quiet=quiet)
     supervisor.start()
