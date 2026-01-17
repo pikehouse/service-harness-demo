@@ -18,7 +18,7 @@ def get_engine(database_url: Optional[str] = None):
     engine = create_engine(
         url,
         connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
-        echo=get_settings().is_development,
+        echo=False,  # Disable SQL query logging (too noisy)
     )
 
     # Enable foreign keys for SQLite
