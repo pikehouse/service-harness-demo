@@ -154,15 +154,19 @@ class LokiClient:
             else:
                 # Simplified single entry format
                 entries = [{
-                    "timestamp": stream.get("timestamp") or datetime.utcnow(),
+                    "timestamp": stream.get("timestamp"),  # None if not provided
                     "line": stream["line"],
                 }]
 
             # Convert to Loki format
             loki_values = []
             for entry in entries:
-                timestamp = entry.get("timestamp") or datetime.utcnow()
-                timestamp_ns = str(int(timestamp.timestamp() * 1_000_000_000))
+                if entry.get("timestamp"):
+                    # Use provided timestamp
+                    timestamp_ns = str(int(entry["timestamp"].timestamp() * 1_000_000_000))
+                else:
+                    # Use time.time() for current time (avoids naive datetime timezone issues)
+                    timestamp_ns = str(int(time.time() * 1_000_000_000))
                 line = entry["line"]
                 loki_values.append([timestamp_ns, line])
 
@@ -232,7 +236,8 @@ class LokiClient:
             True if healthy, False otherwise
         """
         try:
-            response = self._client.get(f"{self.base_url}/ready")
+            # Grafana Cloud doesn't have /ready, use labels endpoint instead
+            response = self._client.get(f"{self.base_url}/loki/api/v1/labels")
             return response.status_code == 200
         except Exception:
             return False

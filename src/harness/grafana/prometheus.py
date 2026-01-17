@@ -171,8 +171,11 @@ class PrometheusClient:
                 label_messages += self._encode_message_field(1, label_data)
 
             # Build sample
-            timestamp = metric.get("timestamp", datetime.utcnow())
-            timestamp_ms = int(timestamp.timestamp() * 1000)
+            if metric.get("timestamp"):
+                timestamp_ms = int(metric["timestamp"].timestamp() * 1000)
+            else:
+                # Use time.time() for current time (avoids naive datetime timezone issues)
+                timestamp_ms = int(time.time() * 1000)
             value = float(metric["value"])
 
             # Sample message: field 1 (value) = double, field 2 (timestamp) = int64

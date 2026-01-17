@@ -329,8 +329,9 @@ class TestLokiClient:
     @respx.mock
     def test_check_health_success(self, client):
         """Test health check when Loki is healthy."""
-        respx.get("https://logs-test.grafana.net/ready").mock(
-            return_value=httpx.Response(200, text="ready")
+        # Grafana Cloud doesn't have /ready, use labels endpoint instead
+        respx.get("https://logs-test.grafana.net/loki/api/v1/labels").mock(
+            return_value=httpx.Response(200, json={"status": "success", "data": []})
         )
 
         assert client.check_health() is True
@@ -338,7 +339,7 @@ class TestLokiClient:
     @respx.mock
     def test_check_health_failure(self, client):
         """Test health check when Loki is unhealthy."""
-        respx.get("https://logs-test.grafana.net/ready").mock(
+        respx.get("https://logs-test.grafana.net/loki/api/v1/labels").mock(
             return_value=httpx.Response(503)
         )
 
