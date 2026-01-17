@@ -34,55 +34,30 @@ def run_demo():
     subprocess.run(["tmux", "set-option", "-g", "pane-border-status", "top"])
     subprocess.run(["tmux", "set-option", "-g", "pane-border-format", " #{pane_title} "])
 
-    # Create new session with first pane (service)
+    # Create new session with first pane (service) - pane 0
     subprocess.run([
         "tmux", "new-session", "-d", "-s", session_name,
         "-n", "harness",
         "harness service"
     ])
+    subprocess.run(["tmux", "select-pane", "-T", "SERVICE (rate limiter :8001)"])
 
-    # Set title for service pane
-    subprocess.run([
-        "tmux", "select-pane", "-t", f"{session_name}:0.0", "-T", "SERVICE (rate limiter :8001)"
-    ])
+    # Split horizontally for monitor (right side) - pane 1
+    subprocess.run(["tmux", "split-window", "-h", "-t", session_name, "harness monitor"])
+    subprocess.run(["tmux", "select-pane", "-T", "MONITOR (health checks)"])
 
-    # Split horizontally for monitor (right side)
-    subprocess.run([
-        "tmux", "split-window", "-h", "-t", session_name,
-        "harness monitor"
-    ])
-    subprocess.run([
-        "tmux", "select-pane", "-t", f"{session_name}:0.1", "-T", "MONITOR (health checks)"
-    ])
+    # Go back to pane 0 (service) and split vertically for agent - pane 2
+    subprocess.run(["tmux", "select-pane", "-t", f"{session_name}:0.0"])
+    subprocess.run(["tmux", "split-window", "-v", "-t", session_name, "harness agent"])
+    subprocess.run(["tmux", "select-pane", "-T", "AGENT (ticket worker)"])
 
-    # Split the left pane vertically for agent (bottom left)
-    subprocess.run([
-        "tmux", "select-pane", "-t", f"{session_name}:0.0"
-    ])
-    subprocess.run([
-        "tmux", "split-window", "-v", "-t", session_name,
-        "harness agent"
-    ])
-    subprocess.run([
-        "tmux", "select-pane", "-t", f"{session_name}:0.2", "-T", "AGENT (ticket worker)"
-    ])
-
-    # Split the right pane vertically for web (bottom right)
-    subprocess.run([
-        "tmux", "select-pane", "-t", f"{session_name}:0.1"
-    ])
-    subprocess.run([
-        "tmux", "split-window", "-v", "-t", session_name,
-        "harness web"
-    ])
-    subprocess.run([
-        "tmux", "select-pane", "-t", f"{session_name}:0.3", "-T", "WEB (API :8000)"
-    ])
+    # Go to pane 1 (monitor) and split vertically for web - pane 3
+    subprocess.run(["tmux", "select-pane", "-t", f"{session_name}:0.1"])
+    subprocess.run(["tmux", "split-window", "-v", "-t", session_name, "harness web"])
+    subprocess.run(["tmux", "select-pane", "-T", "WEB (API :8000)"])
 
     # Select the service pane (top left)
-    subprocess.run([
-        "tmux", "select-pane", "-t", f"{session_name}:0.0"
-    ])
+    subprocess.run(["tmux", "select-pane", "-t", f"{session_name}:0.0"])
 
     print(f"Demo started in tmux session '{session_name}'")
     print()
