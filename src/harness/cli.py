@@ -30,9 +30,10 @@ def run_demo():
     subprocess.run(["tmux", "kill-session", "-t", session_name],
                    capture_output=True)
 
-    # Enable pane titles
+    # Enable pane titles and keep panes open when process exits
     subprocess.run(["tmux", "set-option", "-g", "pane-border-status", "top"])
     subprocess.run(["tmux", "set-option", "-g", "pane-border-format", " #{pane_title} "])
+    subprocess.run(["tmux", "set-option", "-g", "remain-on-exit", "on"])
 
     # Create new session with first pane (service) - pane 0
     subprocess.run([
