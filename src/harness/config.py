@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./harness.db"
 
+    # Claude API
+    anthropic_api_key: str = ""
+
     # Environment
     environment: str = "development"
 
