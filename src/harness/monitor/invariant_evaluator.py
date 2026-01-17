@@ -7,6 +7,7 @@ import logging
 import operator
 import re
 
+import httpx
 from sqlalchemy.orm import Session
 
 from harness.models import Invariant, Ticket, TicketEvent, TicketStatus, TicketPriority, TicketSourceType, TicketEventType
@@ -100,6 +101,10 @@ class InvariantEvaluator:
     def evaluate(self, invariant: Invariant) -> InvariantEvaluation:
         """Evaluate a single invariant.
 
+        Supports two query types:
+        - HTTP health check: query starts with http:// or https://
+        - Prometheus query: any other query string
+
         Args:
             invariant: The invariant to evaluate
 
@@ -108,6 +113,91 @@ class InvariantEvaluator:
         """
         now = datetime.utcnow()
 
+        # Check if this is an HTTP health check
+        if invariant.query.startswith("http://") or invariant.query.startswith("https://"):
+            return self._evaluate_http(invariant, now)
+        else:
+            return self._evaluate_prometheus(invariant, now)
+
+    def _evaluate_http(self, invariant: Invariant, now: datetime) -> InvariantEvaluation:
+        """Evaluate an HTTP health check invariant."""
+        try:
+            # Parse the condition (e.g., "status == 200")
+            op_func, threshold = parse_condition(invariant.condition)
+
+            # Make the HTTP request
+            try:
+                response = httpx.get(invariant.query, timeout=5.0)
+                current_value = float(response.status_code)
+            except httpx.ConnectError:
+                # Service not reachable
+                return InvariantEvaluation(
+                    invariant_id=invariant.id,
+                    invariant_name=invariant.name,
+                    query=invariant.query,
+                    condition=invariant.condition,
+                    current_value=None,
+                    threshold_value=threshold,
+                    is_passing=False,
+                    evaluated_at=now,
+                    error="Connection refused - service not reachable",
+                )
+            except httpx.TimeoutException:
+                return InvariantEvaluation(
+                    invariant_id=invariant.id,
+                    invariant_name=invariant.name,
+                    query=invariant.query,
+                    condition=invariant.condition,
+                    current_value=None,
+                    threshold_value=threshold,
+                    is_passing=False,
+                    evaluated_at=now,
+                    error="Request timed out",
+                )
+
+            # Check if the condition passes
+            is_passing = op_func(current_value, threshold)
+
+            return InvariantEvaluation(
+                invariant_id=invariant.id,
+                invariant_name=invariant.name,
+                query=invariant.query,
+                condition=invariant.condition,
+                current_value=current_value,
+                threshold_value=threshold,
+                is_passing=is_passing,
+                evaluated_at=now,
+            )
+
+        except ValueError as e:
+            logger.error(f"Invalid condition for invariant {invariant.name}: {e}")
+            return InvariantEvaluation(
+                invariant_id=invariant.id,
+                invariant_name=invariant.name,
+                query=invariant.query,
+                condition=invariant.condition,
+                current_value=None,
+                threshold_value=0,
+                is_passing=True,
+                evaluated_at=now,
+                error=str(e),
+            )
+        except Exception as e:
+            logger.exception(f"Error evaluating HTTP invariant {invariant.name}")
+            return InvariantEvaluation(
+                invariant_id=invariant.id,
+                invariant_name=invariant.name,
+                query=invariant.query,
+                condition=invariant.condition,
+                current_value=None,
+                threshold_value=0,
+                is_passing=False,
+                evaluated_at=now,
+                error=str(e),
+            )
+
+    def _evaluate_prometheus(self, invariant: Invariant, now: datetime) -> InvariantEvaluation:
+        """Evaluate a Prometheus query invariant."""
         try:
             # Parse the condition
             op_func, threshold = parse_condition(invariant.condition)

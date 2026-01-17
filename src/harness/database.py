@@ -61,6 +61,24 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+from contextlib import contextmanager
+
+@contextmanager
+def get_session() -> Generator[Session, None, None]:
+    """Context manager for getting a database session.
+
+    Usage:
+        with get_session() as db:
+            db.query(...)
+    """
+    SessionLocal = get_session_local()
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 def init_db(engine=None):
     """Initialize the database, creating all tables."""
     if engine is None:

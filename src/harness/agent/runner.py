@@ -351,6 +351,47 @@ Update the ticket status when you're done."""
         finally:
             db.close()
 
+    def run(self, poll_interval: float = 5.0):
+        """Run the agent loop synchronously.
+
+        Args:
+            poll_interval: Seconds between checking for ready tickets
+        """
+        import time
+        import signal
+
+        self._running = True
+
+        def handle_signal(signum, frame):
+            logger.info("Agent received shutdown signal")
+            self._running = False
+
+        signal.signal(signal.SIGINT, handle_signal)
+        signal.signal(signal.SIGTERM, handle_signal)
+
+        logger.info(f"Starting agent loop (poll interval: {poll_interval}s)")
+        print(f"Agent running (polling every {poll_interval}s)")
+
+        while self._running:
+            try:
+                result = self.run_once()
+                if result["status"] == "worked":
+                    logger.info(f"Completed ticket {result['ticket_id']}")
+                    print(f"Worked ticket #{result['ticket_id']} -> {result['trajectory']['final_status']}")
+                else:
+                    logger.debug("No work, sleeping...")
+            except Exception as e:
+                logger.exception("Error in agent loop")
+                print(f"Agent error: {e}")
+
+            # Sleep in small increments to allow shutdown
+            sleep_remaining = poll_interval
+            while sleep_remaining > 0 and self._running:
+                time.sleep(min(0.5, sleep_remaining))
+                sleep_remaining -= 0.5
+
+        logger.info("Agent stopped")
+
     async def run_async(self, poll_interval: int = 30):
         """Run the agent loop asynchronously.
 

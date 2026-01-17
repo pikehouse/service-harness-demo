@@ -3,4 +3,11 @@
 from harness.agent.tools import AgentToolkit
 from harness.agent.runner import AgentRunner
 
-__all__ = ["AgentToolkit", "AgentRunner"]
+__all__ = ["AgentToolkit", "AgentRunner", "run_agent"]
+
+
+def run_agent():
+    """Run the agent process."""
+    print("Starting agent process")
+    runner = AgentRunner()
+    runner.run()
