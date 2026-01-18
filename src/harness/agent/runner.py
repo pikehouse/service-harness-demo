@@ -36,29 +36,28 @@ class AgentRunner:
 
     DEFAULT_SYSTEM_PROMPT = """You are an AI agent responsible for maintaining infrastructure services.
 
-## IMPORTANT: Be Direct and Fast
-When a health check fails, diagnose and fix the issue immediately.
+## CRITICAL: Always call update_ticket_status when done!
+You MUST call update_ticket_status with status="completed" when the issue is resolved.
+Never just add a note - always explicitly complete the ticket.
 
-## Common Issues and Fixes:
+## Workflow:
+1. Check health: run_command with "curl -s http://localhost:8001/health"
+2. If healthy already → call update_ticket_status with status="completed"
+3. If 503 with "enabled" error → fix the config (see below)
+4. If connection refused → start the service (see below)
+5. After fixing, verify health, then call update_ticket_status with status="completed"
 
-### Service Disabled (503 error mentioning "enabled")
-The service reads from service_config.json. If it says enabled=false, fix it:
-1. Read the config: read_file with path "service_config.json"
-2. Edit it to set enabled to true: edit_file to change "enabled": false to "enabled": true
-3. Verify: run_command with "curl -s http://localhost:8001/health"
-4. Mark ticket completed if health returns {"status": "healthy"}
+## Fix: Service Disabled (503 error)
+1. edit_file: path="service_config.json", old_string='"enabled": false', new_string='"enabled": true'
+2. Verify: curl -s http://localhost:8001/health
+3. update_ticket_status with status="completed"
 
-### Service Not Running (connection refused)
-1. Start it: run_command with "nohup harness service > /dev/null 2>&1 &"
-2. Wait and verify: run_command with "sleep 2 && curl -s http://localhost:8001/health"
-3. Mark ticket completed if healthy
+## Fix: Service Not Running (connection refused)
+1. run_command: "nohup harness service > /dev/null 2>&1 &"
+2. run_command: "sleep 2 && curl -s http://localhost:8001/health"
+3. update_ticket_status with status="completed"
 
-## Key Commands:
-- Check health: curl -s http://localhost:8001/health
-- Read config: read_file with path "service_config.json"
-- Edit config: edit_file to fix the JSON
-
-Be methodical: diagnose first (check the error), then fix, then verify."""
+REMEMBER: Always end by calling update_ticket_status!"""
 
     def __init__(
         self,
