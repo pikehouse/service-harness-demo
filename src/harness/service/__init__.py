@@ -26,11 +26,22 @@ def _keyboard_listener(app, stop_event):
             if select.select([sys.stdin], [], [], 0.1)[0]:
                 char = sys.stdin.read(1)
                 if char == ' ':
-                    app.state.playing_dead = not app.state.playing_dead
-                    status = "PLAYING DEAD 💀" if app.state.playing_dead else "ALIVE ✓"
-                    print(f"\n{'='*50}", flush=True)
+                    # Toggle enabled in config file
+                    config = app.state.read_config()
+                    config["enabled"] = not config.get("enabled", True)
+                    app.state.write_config(config)
+
+                    if config["enabled"]:
+                        status = "ENABLED ✓"
+                        msg = "Service is healthy"
+                    else:
+                        status = "DISABLED 💀"
+                        msg = f"Agent must edit {app.state.config_path} to fix!"
+
+                    print(f"\n{'='*60}", flush=True)
                     print(f"  SERVICE STATUS: {status}", flush=True)
-                    print(f"{'='*50}\n", flush=True)
+                    print(f"  {msg}", flush=True)
+                    print(f"{'='*60}\n", flush=True)
                 elif char == 'q':
                     break
     except Exception:

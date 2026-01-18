@@ -342,14 +342,44 @@ def create_rate_limiter_app(
         lifespan=lifespan,
     )
 
-    # Play dead state - can be toggled to simulate service failure
-    app.state.playing_dead = False
+    # Config file path for service state
+    import os
+    config_path = os.path.join(os.getcwd(), "service_config.json")
+
+    def _read_config():
+        """Read service config, creating default if missing."""
+        import json
+        if os.path.exists(config_path):
+            try:
+                with open(config_path) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {"enabled": True}
+
+    def _write_config(config):
+        """Write service config."""
+        import json
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+
+    # Initialize config file
+    if not os.path.exists(config_path):
+        _write_config({"enabled": True})
+
+    app.state.read_config = _read_config
+    app.state.write_config = _write_config
+    app.state.config_path = config_path
 
     @app.get("/health")
     async def health():
         """Health check endpoint."""
-        if app.state.playing_dead:
-            raise HTTPException(status_code=503, detail="Service unavailable (playing dead)")
+        config = _read_config()
+        if not config.get("enabled", True):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Service disabled in {config_path}. Set enabled=true to fix."
+            )
         return {"status": "healthy", "service": "rate_limiter"}
 
     @app.post("/v1/check", response_model=RateLimitResponse)

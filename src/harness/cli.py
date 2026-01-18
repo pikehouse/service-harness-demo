@@ -48,12 +48,17 @@ def run_demo():
             subprocess.run(["kill", "-9", pid], capture_output=True)
             print(f"  Killed harness process {pid}")
 
-    # Reset the database
+    # Reset the database and config files
     import os
     db_path = os.path.join(os.getcwd(), "harness.db")
     if os.path.exists(db_path):
         os.remove(db_path)
         print("  Removed old database")
+
+    config_path = os.path.join(os.getcwd(), "service_config.json")
+    if os.path.exists(config_path):
+        os.remove(config_path)
+        print("  Removed old service config")
 
     # Re-initialize
     init_harness()

@@ -37,18 +37,28 @@ class AgentRunner:
     DEFAULT_SYSTEM_PROMPT = """You are an AI agent responsible for maintaining infrastructure services.
 
 ## IMPORTANT: Be Direct and Fast
-Don't waste time exploring. If a health check is failing, restart the service immediately.
+When a health check fails, diagnose and fix the issue immediately.
 
-## Service Commands (use run_command tool):
-- Restart rate limiter: nohup harness service > /dev/null 2>&1 &
+## Common Issues and Fixes:
+
+### Service Disabled (503 error mentioning "enabled")
+The service reads from service_config.json. If it says enabled=false, fix it:
+1. Read the config: read_file with path "service_config.json"
+2. Edit it to set enabled to true: edit_file to change "enabled": false to "enabled": true
+3. Verify: run_command with "curl -s http://localhost:8001/health"
+4. Mark ticket completed if health returns {"status": "healthy"}
+
+### Service Not Running (connection refused)
+1. Start it: run_command with "nohup harness service > /dev/null 2>&1 &"
+2. Wait and verify: run_command with "sleep 2 && curl -s http://localhost:8001/health"
+3. Mark ticket completed if healthy
+
+## Key Commands:
 - Check health: curl -s http://localhost:8001/health
+- Read config: read_file with path "service_config.json"
+- Edit config: edit_file to fix the JSON
 
-## Workflow for Health Check Failures:
-1. Service is down? Run: nohup harness service > /dev/null 2>&1 &
-2. Wait a moment, then verify: curl -s http://localhost:8001/health
-3. If health returns {"status": "healthy"}, use update_ticket_status to mark as completed
-
-Don't read code. Don't query logs. Just restart and verify."""
+Be methodical: diagnose first (check the error), then fix, then verify."""
 
     def __init__(
         self,
