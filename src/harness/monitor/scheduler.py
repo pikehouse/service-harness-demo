@@ -15,6 +15,16 @@ from harness.monitor.analyst import MonitorAnalyst
 
 logger = logging.getLogger(__name__)
 
+# ANSI color codes
+COLORS = {
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "cyan": "\033[36m",
+    "red": "\033[31m",
+    "bold": "\033[1m",
+    "reset": "\033[0m",
+}
+
 
 class MonitorScheduler:
     """Runs invariant checks on a fixed interval.
@@ -46,7 +56,8 @@ class MonitorScheduler:
         self._analyst = MonitorAnalyst()
 
         logger.info(f"Monitor scheduler starting (interval={self.interval}s)")
-        print(f"Monitor scheduler running (checking every {self.interval}s)")
+        c = COLORS
+        print(f"{c['bold']}{c['yellow']}👁 Monitor running{c['reset']} (checking every {c['cyan']}{self.interval}s{c['reset']})", flush=True)
 
         try:
             while self.running:
@@ -54,7 +65,7 @@ class MonitorScheduler:
                     self._run_checks()
                 except Exception as e:
                     logger.exception(f"Error in monitor check cycle: {e}")
-                    print(f"Monitor error: {e}")
+                    print(f"{COLORS['red']}Monitor error: {e}{COLORS['reset']}", flush=True)
 
                 # Sleep in small increments to allow shutdown
                 sleep_remaining = self.interval
@@ -95,8 +106,9 @@ class MonitorScheduler:
                         f"value={evaluation.current_value}, condition={evaluation.condition}"
                     )
                     print(
-                        f"ALERT: Invariant '{evaluation.invariant_name}' failed "
-                        f"(value={evaluation.current_value})"
+                        f"{COLORS['red']}{COLORS['bold']}⚠ ALERT:{COLORS['reset']} "
+                        f"'{COLORS['cyan']}{evaluation.invariant_name}{COLORS['reset']}' failed "
+                        f"(value={evaluation.current_value})", flush=True
                     )
                     failures.append(evaluation)
                 else:
@@ -132,9 +144,9 @@ class MonitorScheduler:
                 continue
 
             # Invoke the analyst to decide what to do
-            print(f"Analyzing failure: {evaluation.invariant_name}...")
+            print(f"  {COLORS['yellow']}Analyzing failure...{COLORS['reset']}", flush=True)
             ticket = self._analyst.analyze_failure(db, evaluation)
 
             if ticket:
-                print(f"Created ticket #{ticket.id}: {ticket.objective}")
+                print(f"  {COLORS['green']}→ Created ticket #{ticket.id}:{COLORS['reset']} {ticket.objective}", flush=True)
                 logger.info(f"Created ticket {ticket.id} for invariant failure")

@@ -342,9 +342,14 @@ def create_rate_limiter_app(
         lifespan=lifespan,
     )
 
+    # Play dead state - can be toggled to simulate service failure
+    app.state.playing_dead = False
+
     @app.get("/health")
     async def health():
         """Health check endpoint."""
+        if app.state.playing_dead:
+            raise HTTPException(status_code=503, detail="Service unavailable (playing dead)")
         return {"status": "healthy", "service": "rate_limiter"}
 
     @app.post("/v1/check", response_model=RateLimitResponse)

@@ -8,11 +8,12 @@ def run_demo():
     """Launch demo in tmux with split panes.
 
     Layout:
-    ┌─────────────────┬─────────────────┐
-    │     service     │     monitor     │
-    ├─────────────────┼─────────────────┤
-    │      agent      │      web        │
-    └─────────────────┴─────────────────┘
+    ┌───────────────────┬─────────────────┐
+    │     SERVICE       │    MONITOR      │
+    │  (SPACE=play dead)│                 │
+    ├───────────────────┴─────────────────┤
+    │           AGENT (full width)        │
+    └─────────────────────────────────────┘
     """
     import subprocess
     import shutil
@@ -41,21 +42,16 @@ def run_demo():
         "-n", "harness",
         "harness service"
     ])
-    subprocess.run(["tmux", "select-pane", "-T", "SERVICE (rate limiter :8001)"])
+    subprocess.run(["tmux", "select-pane", "-T", "SERVICE - Press SPACE to play dead 💀"])
 
     # Split horizontally for monitor (right side) - pane 1
     subprocess.run(["tmux", "split-window", "-h", "-t", session_name, "harness monitor"])
-    subprocess.run(["tmux", "select-pane", "-T", "MONITOR (health checks)"])
+    subprocess.run(["tmux", "select-pane", "-T", "MONITOR (health checks every 5s)"])
 
-    # Go back to pane 0 (service) and split vertically for agent - pane 2
+    # Select pane 0 and split vertically for agent (full width bottom)
     subprocess.run(["tmux", "select-pane", "-t", f"{session_name}:0.0"])
-    subprocess.run(["tmux", "split-window", "-v", "-t", session_name, "harness agent"])
+    subprocess.run(["tmux", "split-window", "-v", "-t", session_name, "-p", "35", "-f", "harness agent"])
     subprocess.run(["tmux", "select-pane", "-T", "AGENT (ticket worker)"])
-
-    # Go to pane 1 (monitor) and split vertically for web - pane 3
-    subprocess.run(["tmux", "select-pane", "-t", f"{session_name}:0.1"])
-    subprocess.run(["tmux", "split-window", "-v", "-t", session_name, "harness web"])
-    subprocess.run(["tmux", "select-pane", "-T", "WEB (API :8000)"])
 
     # Select the service pane (top left)
     subprocess.run(["tmux", "select-pane", "-t", f"{session_name}:0.0"])
@@ -66,17 +62,18 @@ def run_demo():
     print("To kill:   tmux kill-session -t harness-demo")
     print()
     print("Demo layout:")
-    print("┌─────────────────┬─────────────────┐")
-    print("│     service     │     monitor     │")
-    print("├─────────────────┼─────────────────┤")
-    print("│      agent      │       web       │")
-    print("└─────────────────┴─────────────────┘")
+    print("┌───────────────────┬─────────────────┐")
+    print("│     SERVICE       │    MONITOR      │")
+    print("│  (SPACE=play dead)│                 │")
+    print("├───────────────────┴─────────────────┤")
+    print("│           AGENT (full width)        │")
+    print("└─────────────────────────────────────┘")
     print()
-    print("To kill the service and trigger recovery:")
-    print("  1. Attach to tmux: tmux attach -t harness-demo")
-    print("  2. Select service pane (top-left): Ctrl-b, arrow keys")
-    print("  3. Press Ctrl-C to kill it")
-    print("  4. Watch monitor detect failure and agent restart it!")
+    print("To trigger the demo:")
+    print("  1. Select the SERVICE pane (top-left)")
+    print("  2. Press SPACE to make it 'play dead'")
+    print("  3. Watch MONITOR detect failure → AGENT fix it!")
+    print("  4. Press SPACE again to see it recover")
 
     # Attach to session
     subprocess.run(["tmux", "attach", "-t", session_name])

@@ -15,6 +15,17 @@ from harness.agent.tools import AgentToolkit
 
 logger = logging.getLogger(__name__)
 
+# ANSI color codes
+COLORS = {
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "cyan": "\033[36m",
+    "red": "\033[31m",
+    "magenta": "\033[35m",
+    "bold": "\033[1m",
+    "reset": "\033[0m",
+}
+
 
 class AgentRunner:
     """Runs the agent loop, working tickets by calling Claude with tools.
@@ -106,7 +117,9 @@ Don't read code. Don't query logs. Just restart and verify."""
             Result dict with trajectory and outcome
         """
         logger.info(f"Starting work on ticket {ticket.id}: {ticket.objective}")
-        print(f"Working ticket #{ticket.id}: {ticket.objective[:60]}...", flush=True)
+        c = COLORS
+        print(f"\n{c['bold']}{c['green']}▶ WORKING TICKET #{ticket.id}{c['reset']}", flush=True)
+        print(f"  {c['cyan']}Objective:{c['reset']} {ticket.objective}", flush=True)
 
         # Mark as in progress
         ticket.status = TicketStatus.IN_PROGRESS
@@ -142,7 +155,7 @@ Don't read code. Don't query logs. Just restart and verify."""
         while turn < self._max_turns:
             turn += 1
             logger.debug(f"Ticket {ticket.id}: Turn {turn}")
-            print(f"  Turn {turn}/{self._max_turns}...", flush=True)
+            print(f"  {COLORS['yellow']}Turn {turn}/{self._max_turns}{COLORS['reset']}", flush=True)
 
             try:
                 # Call Claude
@@ -191,7 +204,7 @@ Don't read code. Don't query logs. Just restart and verify."""
                             tool_input = content.input
 
                             logger.debug(f"Executing tool: {tool_name}")
-                            print(f"    -> {tool_name}({', '.join(f'{k}={repr(v)[:30]}' for k, v in tool_input.items())})", flush=True)
+                            print(f"    {COLORS['magenta']}→ {tool_name}{COLORS['reset']}({', '.join(f'{k}={repr(v)[:50]}' for k, v in tool_input.items())})", flush=True)
                             result = toolkit.execute_tool(tool_name, tool_input)
 
                             # Record agent action event
@@ -371,21 +384,23 @@ Update the ticket status when you're done."""
         signal.signal(signal.SIGTERM, handle_signal)
 
         logger.info(f"Starting agent loop (poll interval: {poll_interval}s)")
-        print(f"Agent running (polling every {poll_interval}s)", flush=True)
+        print(f"{COLORS['bold']}{COLORS['green']}🤖 Agent running{COLORS['reset']} (polling every {poll_interval}s)", flush=True)
 
         while self._running:
             try:
                 result = self.run_once()
                 if result["status"] == "worked":
                     logger.info(f"Completed ticket {result['ticket_id']}")
-                    print(f"Finished ticket #{result['ticket_id']} -> {result['trajectory']['final_status']}", flush=True)
+                    status = result['trajectory']['final_status']
+                    status_color = COLORS['green'] if status == 'completed' else COLORS['red']
+                    print(f"\n{COLORS['bold']}✓ TICKET #{result['ticket_id']} → {status_color}{status.upper()}{COLORS['reset']}\n", flush=True)
                 elif result["status"] == "no_work":
                     pass  # Silent when no work
                 else:
-                    print(f"Agent: {result}", flush=True)
+                    print(f"{COLORS['yellow']}Agent: {result}{COLORS['reset']}", flush=True)
             except Exception as e:
                 logger.exception("Error in agent loop")
-                print(f"Agent error: {e}", flush=True)
+                print(f"{COLORS['red']}Agent error: {e}{COLORS['reset']}", flush=True)
                 import traceback
                 traceback.print_exc()
 
