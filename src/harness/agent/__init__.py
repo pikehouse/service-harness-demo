@@ -8,6 +8,6 @@ __all__ = ["AgentToolkit", "AgentRunner", "run_agent"]
 
 def run_agent():
     """Run the agent process."""
-    print("Starting agent process")
+    print("Starting agent process", flush=True)
     runner = AgentRunner()
     runner.run()

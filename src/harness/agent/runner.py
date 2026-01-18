@@ -27,19 +27,25 @@ class AgentRunner:
 
 Your job is to investigate issues, diagnose problems, and take corrective action.
 
-When working on a ticket:
+## Service Information
+The harness manages a rate limiter service running on port 8001.
+- To restart the service: run_command with "harness service &" or "python -m harness.cli service &"
+- Health check endpoint: http://localhost:8001/health
+- The service runs as a background process
+
+## When working on a ticket:
 1. First understand the objective and success criteria
-2. Use the available tools to gather information (query metrics, logs, code)
-3. Analyze what you find and form a hypothesis
-4. Take action to resolve the issue (edit code, run commands)
-5. Verify the fix worked by checking metrics/logs
-6. Update the ticket status when done
+2. If a health check is failing, the service probably needs to be restarted
+3. Use run_command to restart services (use & to run in background)
+4. Verify the fix worked by checking the health endpoint
+5. Update the ticket status when done (use update_ticket_status tool)
 
-Be methodical and thorough. Document your findings with notes.
-If you're uncertain, investigate more before acting.
-If you encounter something you can't fix, mark the ticket as blocked and explain why.
+## Key Commands:
+- Check if service is running: run_command with "curl -s http://localhost:8001/health"
+- Restart the service: run_command with "harness service &"
 
-Always explain your reasoning before taking action."""
+Be direct and efficient. If a health check is failing, restart the service.
+Mark ticket as completed once the health check passes."""
 
     def __init__(
         self,
@@ -108,6 +114,7 @@ Always explain your reasoning before taking action."""
             Result dict with trajectory and outcome
         """
         logger.info(f"Starting work on ticket {ticket.id}: {ticket.objective}")
+        print(f"Working ticket #{ticket.id}: {ticket.objective[:60]}...", flush=True)
 
         # Mark as in progress
         ticket.status = TicketStatus.IN_PROGRESS
@@ -143,6 +150,7 @@ Always explain your reasoning before taking action."""
         while turn < self._max_turns:
             turn += 1
             logger.debug(f"Ticket {ticket.id}: Turn {turn}")
+            print(f"  Turn {turn}/{self._max_turns}...", flush=True)
 
             try:
                 # Call Claude
@@ -191,6 +199,7 @@ Always explain your reasoning before taking action."""
                             tool_input = content.input
 
                             logger.debug(f"Executing tool: {tool_name}")
+                            print(f"    -> {tool_name}({', '.join(f'{k}={repr(v)[:30]}' for k, v in tool_input.items())})", flush=True)
                             result = toolkit.execute_tool(tool_name, tool_input)
 
                             # Record agent action event
@@ -370,19 +379,23 @@ Update the ticket status when you're done."""
         signal.signal(signal.SIGTERM, handle_signal)
 
         logger.info(f"Starting agent loop (poll interval: {poll_interval}s)")
-        print(f"Agent running (polling every {poll_interval}s)")
+        print(f"Agent running (polling every {poll_interval}s)", flush=True)
 
         while self._running:
             try:
                 result = self.run_once()
                 if result["status"] == "worked":
                     logger.info(f"Completed ticket {result['ticket_id']}")
-                    print(f"Worked ticket #{result['ticket_id']} -> {result['trajectory']['final_status']}")
+                    print(f"Finished ticket #{result['ticket_id']} -> {result['trajectory']['final_status']}", flush=True)
+                elif result["status"] == "no_work":
+                    pass  # Silent when no work
                 else:
-                    logger.debug("No work, sleeping...")
+                    print(f"Agent: {result}", flush=True)
             except Exception as e:
                 logger.exception("Error in agent loop")
-                print(f"Agent error: {e}")
+                print(f"Agent error: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
 
             # Sleep in small increments to allow shutdown
             sleep_remaining = poll_interval
