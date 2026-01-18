@@ -45,7 +45,6 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
-data/*.db
 
 # Service config (generated at runtime)
 service_config.json
