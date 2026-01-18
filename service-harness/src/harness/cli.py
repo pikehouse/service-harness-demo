@@ -120,8 +120,19 @@ def run_demo():
     subprocess.run(["tmux", "attach", "-t", session_name])
 
 
-def init_harness():
-    """Initialize the database and seed data."""
+def load_invariants_from_yaml(yaml_path: str) -> list:
+    """Load invariant definitions from a YAML file."""
+    import yaml
+
+    with open(yaml_path, 'r') as f:
+        data = yaml.safe_load(f)
+
+    return data.get('invariants', [])
+
+
+def init_harness(subject_path: str = None):
+    """Initialize the database and seed data from subject's invariants.yaml."""
+    import os
     from harness.database import init_db, get_session
     from harness.models import Invariant
 
@@ -131,40 +142,40 @@ def init_harness():
     print("  Creating database tables...")
     init_db()
 
-    # Seed invariants
-    print("  Seeding invariants...")
-    with get_session() as db:
-        # Health check invariant
-        existing = db.query(Invariant).filter(Invariant.name == "rate_limiter_healthy").first()
-        if existing:
-            print("    Health check invariant already exists, skipping")
-        else:
-            invariant = Invariant(
-                name="rate_limiter_healthy",
-                description="Rate limiter service responds to health checks",
-                query="http://localhost:8001/health",
-                condition="== 200",
-                enabled=True,
-            )
-            db.add(invariant)
-            db.commit()
-            print(f"    Created invariant: {invariant.name}")
+    # Find invariants.yaml
+    if subject_path is None:
+        # Default: look for subjects/ratelimiter relative to cwd's parent
+        # (assumes we're in service-harness, subject is in ../subjects/ratelimiter)
+        cwd = os.getcwd()
+        subject_path = os.path.join(os.path.dirname(cwd), "subjects", "ratelimiter")
 
-        # Latency SLO invariant
-        existing = db.query(Invariant).filter(Invariant.name == "rate_limiter_latency").first()
-        if existing:
-            print("    Latency SLO invariant already exists, skipping")
-        else:
-            invariant = Invariant(
-                name="rate_limiter_latency",
-                description="Rate limiter responds within 200ms",
-                query="latency:http://localhost:8001/health",
-                condition="< 200",
-                enabled=True,
-            )
-            db.add(invariant)
-            db.commit()
-            print(f"    Created invariant: {invariant.name}")
+    invariants_file = os.path.join(subject_path, "invariants.yaml")
+
+    if not os.path.exists(invariants_file):
+        print(f"  Warning: No invariants.yaml found at {invariants_file}")
+        print("Done!")
+        return
+
+    # Load and seed invariants
+    print(f"  Loading invariants from {invariants_file}...")
+    invariant_defs = load_invariants_from_yaml(invariants_file)
+
+    with get_session() as db:
+        for inv_def in invariant_defs:
+            existing = db.query(Invariant).filter(Invariant.name == inv_def['name']).first()
+            if existing:
+                print(f"    Invariant '{inv_def['name']}' already exists, skipping")
+            else:
+                invariant = Invariant(
+                    name=inv_def['name'],
+                    description=inv_def.get('description', ''),
+                    query=inv_def['query'],
+                    condition=inv_def['condition'],
+                    enabled=True,
+                )
+                db.add(invariant)
+                db.commit()
+                print(f"    Created invariant: {invariant.name}")
 
     print("Done!")
 

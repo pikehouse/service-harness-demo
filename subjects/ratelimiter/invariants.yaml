@@ -1,0 +1,13 @@
+# SLO/Invariant definitions for the rate limiter service
+# These are checked by the monitor every 5 seconds
+
+invariants:
+  - name: rate_limiter_healthy
+    description: Rate limiter service responds to health checks
+    query: http://localhost:8001/health
+    condition: "== 200"
+
+  - name: rate_limiter_latency
+    description: Rate limiter responds within 200ms
+    query: latency:http://localhost:8001/health
+    condition: "< 200"
