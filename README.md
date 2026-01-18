@@ -4,6 +4,8 @@
 
 An autonomous infrastructure management system where AI agents monitor, diagnose, and fix production services in real-time.
 
+![Harness Architecture](docs/images/harness-diagram.png)
+
 ## What is this?
 
 This harness demonstrates a new paradigm: **AI operates the infrastructure, not inside it**. The service itself stays deterministic and testable. The AI agent watches from outside, detects problems, and fixes them autonomously.
