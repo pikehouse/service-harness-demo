@@ -27,9 +27,37 @@ def run_demo():
 
     session_name = "harness-demo"
 
-    # Kill existing session if any
+    print("Cleaning up old state...")
+
+    # Kill existing tmux session if any
     subprocess.run(["tmux", "kill-session", "-t", session_name],
                    capture_output=True)
+
+    # Kill any processes using port 8001 (service)
+    result = subprocess.run(["lsof", "-ti", ":8001"], capture_output=True, text=True)
+    if result.stdout.strip():
+        for pid in result.stdout.strip().split('\n'):
+            subprocess.run(["kill", "-9", pid], capture_output=True)
+            print(f"  Killed process {pid} on port 8001")
+
+    # Kill any harness processes
+    result = subprocess.run(["pgrep", "-f", "harness (service|monitor|agent|web)"],
+                           capture_output=True, text=True)
+    if result.stdout.strip():
+        for pid in result.stdout.strip().split('\n'):
+            subprocess.run(["kill", "-9", pid], capture_output=True)
+            print(f"  Killed harness process {pid}")
+
+    # Reset the database
+    import os
+    db_path = os.path.join(os.getcwd(), "harness.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        print("  Removed old database")
+
+    # Re-initialize
+    init_harness()
+    print()
 
     # Enable pane titles and keep panes open when process exits
     subprocess.run(["tmux", "set-option", "-g", "pane-border-status", "top"])
