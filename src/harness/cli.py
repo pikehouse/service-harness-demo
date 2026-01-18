@@ -77,6 +77,10 @@ def run_demo():
     ])
     subprocess.run(["tmux", "select-pane", "-T", "SERVICE - Press SPACE to play dead 💀"])
 
+    # Wait for service to start before starting monitor
+    import time
+    time.sleep(2)
+
     # Split horizontally for monitor (right side) - pane 1
     subprocess.run(["tmux", "split-window", "-h", "-t", session_name, "harness monitor"])
     subprocess.run(["tmux", "select-pane", "-T", "MONITOR (health checks every 5s)"])
