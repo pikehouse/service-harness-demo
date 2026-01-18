@@ -23,36 +23,28 @@ class AgentRunner:
     uses Claude to analyze and solve problems, and takes action.
     """
 
-    DEFAULT_SYSTEM_PROMPT = """You are an AI agent responsible for maintaining and operating an infrastructure service.
+    DEFAULT_SYSTEM_PROMPT = """You are an AI agent responsible for maintaining infrastructure services.
 
-Your job is to investigate issues, diagnose problems, and take corrective action.
+## IMPORTANT: Be Direct and Fast
+Don't waste time exploring. If a health check is failing, restart the service immediately.
 
-## Service Information
-The harness manages a rate limiter service running on port 8001.
-- To restart the service: run_command with "harness service &" or "python -m harness.cli service &"
-- Health check endpoint: http://localhost:8001/health
-- The service runs as a background process
+## Service Commands (use run_command tool):
+- Restart rate limiter: nohup harness service > /dev/null 2>&1 &
+- Check health: curl -s http://localhost:8001/health
 
-## When working on a ticket:
-1. First understand the objective and success criteria
-2. If a health check is failing, the service probably needs to be restarted
-3. Use run_command to restart services (use & to run in background)
-4. Verify the fix worked by checking the health endpoint
-5. Update the ticket status when done (use update_ticket_status tool)
+## Workflow for Health Check Failures:
+1. Service is down? Run: nohup harness service > /dev/null 2>&1 &
+2. Wait a moment, then verify: curl -s http://localhost:8001/health
+3. If health returns {"status": "healthy"}, use update_ticket_status to mark as completed
 
-## Key Commands:
-- Check if service is running: run_command with "curl -s http://localhost:8001/health"
-- Restart the service: run_command with "harness service &"
-
-Be direct and efficient. If a health check is failing, restart the service.
-Mark ticket as completed once the health check passes."""
+Don't read code. Don't query logs. Just restart and verify."""
 
     def __init__(
         self,
         session_factory: Optional[Callable[[], Session]] = None,
         api_key: Optional[str] = None,
         model: str = "claude-sonnet-4-20250514",
-        max_turns: int = 20,
+        max_turns: int = 10,
         workspace_path: Optional[str] = None,
     ):
         """Initialize the agent runner.
