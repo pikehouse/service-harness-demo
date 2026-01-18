@@ -1,0 +1,21 @@
+# Agent hints for the rate limiter service
+# These tell the AI agent where things are and how to approach fixes
+
+environment:
+  service_code: src/harness/service/
+  service_config: service_config.json
+  health_endpoint: http://localhost:8001/health
+  start_command: "nohup harness service > /dev/null 2>&1 &"
+
+approach: |
+  1. First, check what error you're getting (curl the health endpoint)
+  2. Read relevant code/config to understand the problem
+  3. Make the fix (edit config, restart service, whatever's needed)
+  4. Verify the fix worked
+  5. Call update_ticket_status with status="completed"
+
+tools_available:
+  - run_command: "Run shell commands (curl, ps, etc.)"
+  - read_file: "Read files to understand code/config"
+  - edit_file: "Edit files to fix issues"
+  - update_ticket_status: "Mark ticket complete when done"

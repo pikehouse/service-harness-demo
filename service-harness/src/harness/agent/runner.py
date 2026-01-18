@@ -4,7 +4,9 @@ from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 import logging
 import json
+import os
 
+import yaml
 from anthropic import Anthropic
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
@@ -14,6 +16,60 @@ from harness.models import Ticket, TicketEvent, TicketStatus, TicketEventType
 from harness.agent.tools import AgentToolkit
 
 logger = logging.getLogger(__name__)
+
+
+def load_agent_hints(hints_path: str) -> Dict[str, Any]:
+    """Load agent hints from a YAML file."""
+    with open(hints_path, 'r') as f:
+        return yaml.safe_load(f)
+
+
+def build_system_prompt(hints: Dict[str, Any]) -> str:
+    """Build a system prompt from agent hints."""
+    env = hints.get('environment', {})
+    approach = hints.get('approach', '')
+    tools = hints.get('tools_available', [])
+
+    # Build environment section
+    env_lines = []
+    if env.get('service_code'):
+        env_lines.append(f"- Service code: {env['service_code']}")
+    if env.get('service_config'):
+        env_lines.append(f"- Service config: {env['service_config']} (runtime config)")
+    if env.get('health_endpoint'):
+        env_lines.append(f"- Health endpoint: {env['health_endpoint']}")
+    if env.get('start_command'):
+        env_lines.append(f"- To start service: run_command with \"{env['start_command']}\"")
+
+    # Build tools section
+    tools_lines = []
+    if isinstance(tools, list):
+        for tool in tools:
+            if isinstance(tool, dict):
+                for name, desc in tool.items():
+                    tools_lines.append(f"- {desc}")
+            else:
+                tools_lines.append(f"- {tool}")
+
+    prompt = """You are an AI agent responsible for maintaining infrastructure services.
+
+## Your Environment
+{environment}
+
+## Your Job
+When a health check fails, figure out why and fix it. You have tools to:
+{tools}
+
+## Approach
+{approach}
+
+IMPORTANT: Always call update_ticket_status when you're done!"""
+
+    return prompt.format(
+        environment='\n'.join(env_lines),
+        tools='\n'.join(tools_lines) if tools_lines else "- Run commands, read files, edit files, update ticket status",
+        approach=approach.strip() if approach else "Investigate, diagnose, fix, verify, complete ticket."
+    )
 
 # ANSI color codes
 COLORS = {
@@ -34,30 +90,6 @@ class AgentRunner:
     uses Claude to analyze and solve problems, and takes action.
     """
 
-    DEFAULT_SYSTEM_PROMPT = """You are an AI agent responsible for maintaining infrastructure services.
-
-## Your Environment
-- Service code: src/harness/service/
-- Service config: service_config.json (runtime config)
-- Health endpoint: http://localhost:8001/health
-- To start service: run_command with "nohup harness service > /dev/null 2>&1 &"
-
-## Your Job
-When a health check fails, figure out why and fix it. You have tools to:
-- Run commands (curl, etc.)
-- Read files to understand the code/config
-- Edit files to fix issues
-- Update ticket status when done
-
-## Approach
-1. First, check what error you're getting (curl the health endpoint)
-2. Read relevant code/config to understand the problem
-3. Make the fix (edit config, restart service, whatever's needed)
-4. Verify the fix worked
-5. Call update_ticket_status with status="completed"
-
-IMPORTANT: Always call update_ticket_status when you're done!"""
-
     def __init__(
         self,
         session_factory: Optional[Callable[[], Session]] = None,
@@ -65,6 +97,7 @@ IMPORTANT: Always call update_ticket_status when you're done!"""
         model: str = "claude-sonnet-4-20250514",
         max_turns: int = 50,
         workspace_path: Optional[str] = None,
+        subject_path: Optional[str] = None,
     ):
         """Initialize the agent runner.
 
@@ -74,6 +107,7 @@ IMPORTANT: Always call update_ticket_status when you're done!"""
             model: Claude model to use
             max_turns: Maximum conversation turns per ticket
             workspace_path: Path to the service workspace
+            subject_path: Path to subject directory (loads agent_hints.yaml)
         """
         settings = get_settings()
         self._api_key = api_key or settings.anthropic_api_key
@@ -86,8 +120,36 @@ IMPORTANT: Always call update_ticket_status when you're done!"""
         self._max_turns = max_turns
         self._workspace_path = workspace_path
 
+        # Load agent hints from subject directory
+        self._system_prompt = self._load_system_prompt(subject_path)
+
         from harness.database import get_session_local
         self._session_factory = session_factory or get_session_local()
+
+    def _load_system_prompt(self, subject_path: Optional[str]) -> str:
+        """Load system prompt from subject's agent_hints.yaml."""
+        if subject_path is None:
+            # Default: look for subjects/ratelimiter relative to cwd's parent
+            cwd = os.getcwd()
+            subject_path = os.path.join(os.path.dirname(cwd), "subjects", "ratelimiter")
+
+        hints_file = os.path.join(subject_path, "agent_hints.yaml")
+
+        if os.path.exists(hints_file):
+            logger.info(f"Loading agent hints from {hints_file}")
+            hints = load_agent_hints(hints_file)
+            return build_system_prompt(hints)
+        else:
+            logger.warning(f"No agent_hints.yaml found at {hints_file}, using defaults")
+            return """You are an AI agent responsible for maintaining infrastructure services.
+
+When a health check fails, figure out why and fix it. You have tools to:
+- Run commands (curl, etc.)
+- Read files to understand the code/config
+- Edit files to fix issues
+- Update ticket status when done
+
+IMPORTANT: Always call update_ticket_status when you're done!"""
 
     def get_ready_tickets(self, db: Session) -> List[Ticket]:
         """Get tickets that are ready to be worked.
@@ -168,7 +230,7 @@ IMPORTANT: Always call update_ticket_status when you're done!"""
                 response = self._client.messages.create(
                     model=self._model,
                     max_tokens=4096,
-                    system=self.DEFAULT_SYSTEM_PROMPT,
+                    system=self._system_prompt,
                     tools=tools,
                     messages=messages,
                 )
