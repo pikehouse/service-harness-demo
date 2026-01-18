@@ -356,23 +356,28 @@ Update the ticket status when you're done."""
             actions = []
             for content in response.content:
                 if hasattr(content, "text") and content.text:
-                    actions.append(f"Said: {content.text[:100]}")
+                    actions.append(f"Thinking: {content.text[:200]}")
                 elif hasattr(content, "name"):
-                    actions.append(f"Tool: {content.name}({json.dumps(content.input)[:80]})")
+                    actions.append(f"Using tool: {content.name} with {json.dumps(content.input)[:100]}")
 
             if not actions:
                 return "Thinking..."
 
             summary_response = self._client.messages.create(
-                model="claude-haiku-4-20250514",
-                max_tokens=50,
+                model="claude-3-haiku-20240307",
+                max_tokens=30,
                 messages=[{
                     "role": "user",
-                    "content": f"In 5-8 words, describe what this agent action is doing (no quotes, no period):\n{chr(10).join(actions)}"
+                    "content": f"Summarize this agent action in 5-8 words (no quotes, no period, start with verb):\n\n{chr(10).join(actions)}"
                 }]
             )
-            return summary_response.content[0].text.strip()
-        except Exception:
+            summary = summary_response.content[0].text.strip()
+            # Remove trailing period if present
+            if summary.endswith('.'):
+                summary = summary[:-1]
+            return summary
+        except Exception as e:
+            logger.debug(f"Haiku summary failed: {e}")
             return "Working..."
 
     def run_once(self) -> Dict[str, Any]:
