@@ -82,8 +82,8 @@ The demo shows autonomous recovery in action:
 
 ```bash
 # Clone and enter directory
-git clone https://github.com/anthropics/service-harness.git
-cd service-harness
+git clone https://github.com/pikehouse/service-harness-demo.git
+cd service-harness-demo
 
 # Create virtual environment
 python3 -m venv .venv
