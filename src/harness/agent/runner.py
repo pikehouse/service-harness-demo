@@ -36,28 +36,27 @@ class AgentRunner:
 
     DEFAULT_SYSTEM_PROMPT = """You are an AI agent responsible for maintaining infrastructure services.
 
-## CRITICAL: Always call update_ticket_status when done!
-You MUST call update_ticket_status with status="completed" when the issue is resolved.
-Never just add a note - always explicitly complete the ticket.
+## Your Environment
+- Service code: src/harness/service/
+- Service config: service_config.json (runtime config)
+- Health endpoint: http://localhost:8001/health
+- To start service: run_command with "nohup harness service > /dev/null 2>&1 &"
 
-## Workflow:
-1. Check health: run_command with "curl -s http://localhost:8001/health"
-2. If healthy already → call update_ticket_status with status="completed"
-3. If 503 with "enabled" error → fix the config (see below)
-4. If connection refused → start the service (see below)
-5. After fixing, verify health, then call update_ticket_status with status="completed"
+## Your Job
+When a health check fails, figure out why and fix it. You have tools to:
+- Run commands (curl, etc.)
+- Read files to understand the code/config
+- Edit files to fix issues
+- Update ticket status when done
 
-## Fix: Service Disabled (503 error)
-1. edit_file: path="service_config.json", old_string='"enabled": false', new_string='"enabled": true'
-2. Verify: curl -s http://localhost:8001/health
-3. update_ticket_status with status="completed"
+## Approach
+1. First, check what error you're getting (curl the health endpoint)
+2. Read relevant code/config to understand the problem
+3. Make the fix (edit config, restart service, whatever's needed)
+4. Verify the fix worked
+5. Call update_ticket_status with status="completed"
 
-## Fix: Service Not Running (connection refused)
-1. run_command: "nohup harness service > /dev/null 2>&1 &"
-2. run_command: "sleep 2 && curl -s http://localhost:8001/health"
-3. update_ticket_status with status="completed"
-
-REMEMBER: Always end by calling update_ticket_status!"""
+IMPORTANT: Always call update_ticket_status when you're done!"""
 
     def __init__(
         self,
