@@ -64,7 +64,7 @@ REMEMBER: Always end by calling update_ticket_status!"""
         session_factory: Optional[Callable[[], Session]] = None,
         api_key: Optional[str] = None,
         model: str = "claude-sonnet-4-20250514",
-        max_turns: int = 10,
+        max_turns: int = 50,
         workspace_path: Optional[str] = None,
     ):
         """Initialize the agent runner.
