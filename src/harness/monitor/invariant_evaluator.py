@@ -101,8 +101,9 @@ class InvariantEvaluator:
     def evaluate(self, invariant: Invariant) -> InvariantEvaluation:
         """Evaluate a single invariant.
 
-        Supports two query types:
+        Supports query types:
         - HTTP health check: query starts with http:// or https://
+        - Latency check: query starts with latency: (measures response time in ms)
         - Prometheus query: any other query string
 
         Args:
@@ -113,11 +114,94 @@ class InvariantEvaluator:
         """
         now = datetime.utcnow()
 
-        # Check if this is an HTTP health check
-        if invariant.query.startswith("http://") or invariant.query.startswith("https://"):
+        # Check query type
+        if invariant.query.startswith("latency:"):
+            return self._evaluate_latency(invariant, now)
+        elif invariant.query.startswith("http://") or invariant.query.startswith("https://"):
             return self._evaluate_http(invariant, now)
         else:
             return self._evaluate_prometheus(invariant, now)
+
+    def _evaluate_latency(self, invariant: Invariant, now: datetime) -> InvariantEvaluation:
+        """Evaluate a latency-based invariant (measures response time in ms)."""
+        import time
+
+        # Extract URL from query (format: "latency:http://...")
+        url = invariant.query[len("latency:"):]
+
+        try:
+            op_func, threshold = parse_condition(invariant.condition)
+
+            # Measure response time
+            start = time.time()
+            try:
+                response = httpx.get(url, timeout=5.0)
+                latency_ms = (time.time() - start) * 1000
+            except httpx.ConnectError:
+                return InvariantEvaluation(
+                    invariant_id=invariant.id,
+                    invariant_name=invariant.name,
+                    query=invariant.query,
+                    condition=invariant.condition,
+                    current_value=None,
+                    threshold_value=threshold,
+                    is_passing=False,
+                    evaluated_at=now,
+                    error="Connection refused - service not reachable",
+                )
+            except httpx.TimeoutException:
+                return InvariantEvaluation(
+                    invariant_id=invariant.id,
+                    invariant_name=invariant.name,
+                    query=invariant.query,
+                    condition=invariant.condition,
+                    current_value=5000.0,  # 5 second timeout
+                    threshold_value=threshold,
+                    is_passing=False,
+                    evaluated_at=now,
+                    error="Request timed out (>5000ms)",
+                )
+
+            # Check if latency meets the condition
+            is_passing = op_func(latency_ms, threshold)
+
+            return InvariantEvaluation(
+                invariant_id=invariant.id,
+                invariant_name=invariant.name,
+                query=invariant.query,
+                condition=invariant.condition,
+                current_value=round(latency_ms, 1),
+                threshold_value=threshold,
+                is_passing=is_passing,
+                evaluated_at=now,
+            )
+
+        except ValueError as e:
+            logger.error(f"Invalid condition for invariant {invariant.name}: {e}")
+            return InvariantEvaluation(
+                invariant_id=invariant.id,
+                invariant_name=invariant.name,
+                query=invariant.query,
+                condition=invariant.condition,
+                current_value=None,
+                threshold_value=0,
+                is_passing=True,
+                evaluated_at=now,
+                error=str(e),
+            )
+        except Exception as e:
+            logger.exception(f"Error evaluating latency invariant {invariant.name}")
+            return InvariantEvaluation(
+                invariant_id=invariant.id,
+                invariant_name=invariant.name,
+                query=invariant.query,
+                condition=invariant.condition,
+                current_value=None,
+                threshold_value=0,
+                is_passing=False,
+                evaluated_at=now,
+                error=str(e),
+            )
 
     def _evaluate_http(self, invariant: Invariant, now: datetime) -> InvariantEvaluation:
         """Evaluate an HTTP health check invariant."""

@@ -374,13 +374,27 @@ def create_rate_limiter_app(
     @app.get("/health")
     async def health():
         """Health check endpoint."""
+        import asyncio
+
         config = _read_config()
+
+        # Check if service is enabled
         if not config.get("enabled", True):
             raise HTTPException(
                 status_code=503,
                 detail=f"Service disabled in {config_path}. Set enabled=true to fix."
             )
-        return {"status": "healthy", "service": "rate_limiter"}
+
+        # Apply any configured delay (for chaos testing)
+        delay_ms = config.get("delay_ms", 0)
+        if delay_ms > 0:
+            await asyncio.sleep(delay_ms / 1000.0)
+
+        return {
+            "status": "healthy",
+            "service": "rate_limiter",
+            "delay_ms": delay_ms,
+        }
 
     @app.post("/v1/check", response_model=RateLimitResponse)
     async def check_rate_limit(request: RateLimitRequest):

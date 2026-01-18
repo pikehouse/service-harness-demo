@@ -75,11 +75,12 @@ def run_demo():
         "-n", "harness",
         "harness service"
     ])
-    subprocess.run(["tmux", "select-pane", "-T", "SERVICE - Press SPACE to play dead 💀"])
+    subprocess.run(["tmux", "select-pane", "-T", "SERVICE - SPACE=dead, Z=slow"])
 
-    # Wait for service to start before starting monitor
+    # Wait for service to fully start before starting monitor
     import time
-    time.sleep(2)
+    print("Waiting for service to start...")
+    time.sleep(4)
 
     # Split horizontally for monitor (right side) - pane 1
     subprocess.run(["tmux", "split-window", "-h", "-t", session_name, "harness monitor"])
@@ -101,16 +102,19 @@ def run_demo():
     print("Demo layout:")
     print("┌───────────────────┬─────────────────┐")
     print("│     SERVICE       │    MONITOR      │")
-    print("│  (SPACE=play dead)│                 │")
+    print("│                   │                 │")
     print("├───────────────────┴─────────────────┤")
     print("│           AGENT (full width)        │")
     print("└─────────────────────────────────────┘")
     print()
-    print("To trigger the demo:")
-    print("  1. Select the SERVICE pane (top-left)")
-    print("  2. Press SPACE to make it 'play dead'")
-    print("  3. Watch MONITOR detect failure → AGENT fix it!")
-    print("  4. Press SPACE again to see it recover")
+    print("Chaos keys (in SERVICE pane):")
+    print("  SPACE = play dead (503 error)")
+    print("  Z     = inject 500ms latency (SLO violation)")
+    print()
+    print("Try it:")
+    print("  1. Select SERVICE pane (top-left)")
+    print("  2. Press Z to make it slow")
+    print("  3. Watch MONITOR detect SLO violation → AGENT diagnose & fix!")
 
     # Attach to session
     subprocess.run(["tmux", "attach", "-t", session_name])
@@ -127,10 +131,10 @@ def init_harness():
     print("  Creating database tables...")
     init_db()
 
-    # Seed the health check invariant
-    print("  Seeding health check invariant...")
+    # Seed invariants
+    print("  Seeding invariants...")
     with get_session() as db:
-        # Check if it already exists
+        # Health check invariant
         existing = db.query(Invariant).filter(Invariant.name == "rate_limiter_healthy").first()
         if existing:
             print("    Health check invariant already exists, skipping")
@@ -140,6 +144,22 @@ def init_harness():
                 description="Rate limiter service responds to health checks",
                 query="http://localhost:8001/health",
                 condition="== 200",
+                enabled=True,
+            )
+            db.add(invariant)
+            db.commit()
+            print(f"    Created invariant: {invariant.name}")
+
+        # Latency SLO invariant
+        existing = db.query(Invariant).filter(Invariant.name == "rate_limiter_latency").first()
+        if existing:
+            print("    Latency SLO invariant already exists, skipping")
+        else:
+            invariant = Invariant(
+                name="rate_limiter_latency",
+                description="Rate limiter responds within 200ms",
+                query="latency:http://localhost:8001/health",
+                condition="< 200",
                 enabled=True,
             )
             db.add(invariant)

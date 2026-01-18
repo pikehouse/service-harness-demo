@@ -13,7 +13,7 @@ __all__ = ["TokenBucket", "RateLimiterService", "create_rate_limiter_app", "run_
 
 
 def _keyboard_listener(app, stop_event):
-    """Listen for keyboard input to toggle play dead mode."""
+    """Listen for keyboard input to inject chaos."""
     old_settings = None
     try:
         # Save terminal settings and switch to raw mode
@@ -24,9 +24,10 @@ def _keyboard_listener(app, stop_event):
             # Check if input is available (non-blocking with select)
             import select
             if select.select([sys.stdin], [], [], 0.1)[0]:
-                char = sys.stdin.read(1)
+                char = sys.stdin.read(1).lower()
+
                 if char == ' ':
-                    # Toggle enabled in config file
+                    # Toggle enabled (play dead)
                     config = app.state.read_config()
                     config["enabled"] = not config.get("enabled", True)
                     app.state.write_config(config)
@@ -39,11 +40,32 @@ def _keyboard_listener(app, stop_event):
                         msg = f"Agent must edit {app.state.config_path} to fix!"
 
                     print(f"\n{'='*60}", flush=True)
-                    print(f"  SERVICE STATUS: {status}", flush=True)
+                    print(f"  SERVICE: {status}", flush=True)
                     print(f"  {msg}", flush=True)
                     print(f"{'='*60}\n", flush=True)
+
+                elif char == 'z':
+                    # Toggle latency injection
+                    config = app.state.read_config()
+                    current_delay = config.get("delay_ms", 0)
+                    config["delay_ms"] = 0 if current_delay > 0 else 500
+                    app.state.write_config(config)
+
+                    if config["delay_ms"] > 0:
+                        status = f"SLOW 🐢 ({config['delay_ms']}ms delay)"
+                        msg = "Agent must find and fix the latency issue!"
+                    else:
+                        status = "FAST ⚡"
+                        msg = "Latency is normal"
+
+                    print(f"\n{'='*60}", flush=True)
+                    print(f"  LATENCY: {status}", flush=True)
+                    print(f"  {msg}", flush=True)
+                    print(f"{'='*60}\n", flush=True)
+
                 elif char == 'q':
                     break
+
     except Exception:
         pass  # Terminal not available (e.g., running in background)
     finally:
@@ -58,8 +80,10 @@ def run_service(host: str = "0.0.0.0", port: int = 8001):
 
     print(f"Starting rate limiter service on {host}:{port}")
     print()
-    print("  Press SPACE to toggle play dead mode")
-    print("  Press Q to quit")
+    print("  Chaos keys:")
+    print("    SPACE = toggle play dead (503 error)")
+    print("    Z     = toggle latency injection (500ms delay)")
+    print("    Q     = quit")
     print()
 
     # Create observability clients
