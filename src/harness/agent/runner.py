@@ -163,8 +163,6 @@ IMPORTANT: Always call update_ticket_status when you're done!"""
         while turn < self._max_turns:
             turn += 1
             logger.debug(f"Ticket {ticket.id}: Turn {turn}")
-            print(f"  {COLORS['yellow']}Turn {turn}/{self._max_turns}{COLORS['reset']}", flush=True)
-
             try:
                 # Call Claude
                 response = self._client.messages.create(
@@ -174,6 +172,10 @@ IMPORTANT: Always call update_ticket_status when you're done!"""
                     tools=tools,
                     messages=messages,
                 )
+
+                # Get a one-liner summary from Haiku
+                summary = self._summarize_step(response)
+                print(f"  {COLORS['yellow']}[{turn}]{COLORS['reset']} {COLORS['cyan']}# {summary}{COLORS['reset']}", flush=True)
 
                 # Record step
                 step = {
@@ -212,7 +214,9 @@ IMPORTANT: Always call update_ticket_status when you're done!"""
                             tool_input = content.input
 
                             logger.debug(f"Executing tool: {tool_name}")
-                            print(f"    {COLORS['magenta']}→ {tool_name}{COLORS['reset']}({', '.join(f'{k}={repr(v)[:50]}' for k, v in tool_input.items())})", flush=True)
+                            # Show tool call in muted style
+                            args_str = ', '.join(f'{k}={repr(v)[:40]}' for k, v in tool_input.items())
+                            print(f"       {COLORS['magenta']}› {tool_name}({args_str}){COLORS['reset']}", flush=True)
                             result = toolkit.execute_tool(tool_name, tool_input)
 
                             # Record agent action event
@@ -344,6 +348,32 @@ Update the ticket status when you're done."""
             return {"type": "tool_use", "name": content.name, "input": content.input}
         else:
             return {"type": str(type(content))}
+
+    def _summarize_step(self, response) -> str:
+        """Use Haiku to generate a short one-liner describing what the agent is doing."""
+        try:
+            # Build a description of what's happening
+            actions = []
+            for content in response.content:
+                if hasattr(content, "text") and content.text:
+                    actions.append(f"Said: {content.text[:100]}")
+                elif hasattr(content, "name"):
+                    actions.append(f"Tool: {content.name}({json.dumps(content.input)[:80]})")
+
+            if not actions:
+                return "Thinking..."
+
+            summary_response = self._client.messages.create(
+                model="claude-haiku-4-20250514",
+                max_tokens=50,
+                messages=[{
+                    "role": "user",
+                    "content": f"In 5-8 words, describe what this agent action is doing (no quotes, no period):\n{chr(10).join(actions)}"
+                }]
+            )
+            return summary_response.content[0].text.strip()
+        except Exception:
+            return "Working..."
 
     def run_once(self) -> Dict[str, Any]:
         """Run one iteration of the agent.
